@@ -29,7 +29,7 @@ from mimicgen.datagen.data_generator import DataGenerator
 import generic_pipeline as GP
 
 BDDL_DIR = "/data/zeyu/PHD_LAB/Amazon_Project/zeyu_openpi/third_party/libero/libero/libero/bddl_files/libero_90"
-SRC_DIR = "/data/zeyu/PHD_LAB/Amazon_Project/libero_modified_hdf5/libero90_openvla_256"
+SRC_DIR = "/data/zeyu/PHD_LAB/Amazon_Project/libero_modified_hdf5/libero90_openvla_256_ori"
 SCRATCH_SRC = "/mgbridge/_scratch_prepared_source.hdf5"
 TARGET_SUCCESSES = int(os.environ.get("MG_TARGET_SUCCESSES", 100))
 MAX_ATTEMPTS = int(os.environ.get("MG_MAX_ATTEMPTS", 320))       # hard cap per task so one pathological task can't run forever
