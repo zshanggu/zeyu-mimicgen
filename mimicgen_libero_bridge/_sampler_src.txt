@@ -1,0 +1,140 @@
+[robosuite WARNING] No private macro file found! (macros.py:53)
+[robosuite WARNING] It is recommended to use a private macro file (macros.py:54)
+[robosuite WARNING] To setup, run: python /.venv/lib/python3.8/site-packages/robosuite/scripts/setup_macros.py (macros.py:55)
+class SequentialCompositeSampler(ObjectPositionSampler):
+    """
+    Samples position for each object sequentially. Allows chaining
+    multiple placement initializers together - so that object locations can
+    be sampled on top of other objects or relative to other object placements.
+
+    Args:
+        name (str): Name of this sampler.
+    """
+
+    def __init__(self, name):
+        # Samplers / args will be filled in later
+        self.samplers = collections.OrderedDict()
+        self.sample_args = collections.OrderedDict()
+
+        super().__init__(name=name)
+
+    def append_sampler(self, sampler, sample_args=None):
+        """
+        Adds a new placement initializer with corresponding @sampler and arguments
+
+        Args:
+            sampler (ObjectPositionSampler): sampler to add
+            sample_args (None or dict): If specified, should be additional arguments to pass to @sampler's sample()
+                call. Should map corresponding sampler's arguments to values (excluding @fixtures argument)
+
+        Raises:
+            AssertionError: [Object name in samplers]
+        """
+        # Verify that all added mujoco objects haven't already been added, and add to this sampler's objects dict
+        for obj in sampler.mujoco_objects:
+            assert obj not in self.mujoco_objects, f"Object '{obj.name}' already has sampler associated with it!"
+            self.mujoco_objects.append(obj)
+        self.samplers[sampler.name] = sampler
+        self.sample_args[sampler.name] = sample_args
+
+    def hide(self, mujoco_objects):
+        """
+        Helper method to remove an object from the workspace.
+
+        Args:
+            mujoco_objects (MujocoObject or list of MujocoObject): Object(s) to hide
+        """
+        sampler = UniformRandomSampler(
+            name="HideSampler",
+            mujoco_objects=mujoco_objects,
+            x_range=[-10, -20],
+            y_range=[-10, -20],
+            rotation=[0, 0],
+            rotation_axis="z",
+            z_offset=10,
+            ensure_object_boundary_in_range=False,
+            ensure_valid_placement=False,
+        )
+        self.append_sampler(sampler=sampler)
+
+    def add_objects(self, mujoco_objects):
+        """
+        Override super method to make sure user doesn't call this (all objects should implicitly belong to sub-samplers)
+        """
+        raise AttributeError("add_objects() should not be called for SequentialCompsiteSamplers!")
+
+    def add_objects_to_sampler(self, sampler_name, mujoco_objects):
+        """
+        Adds specified @mujoco_objects to sub-sampler with specified @sampler_name.
+
+        Args:
+            sampler_name (str): Existing sub-sampler name
+            mujoco_objects (MujocoObject or list of MujocoObject): Object(s) to add
+        """
+        # First verify that all mujoco objects haven't already been added, and add to this sampler's objects dict
+        mujoco_objects = [mujoco_objects] if isinstance(mujoco_objects, MujocoObject) else mujoco_objects
+        for obj in mujoco_objects:
+            assert obj not in self.mujoco_objects, f"Object '{obj.name}' already has sampler associated with it!"
+            self.mujoco_objects.append(obj)
+        # Make sure sampler_name exists
+        assert (
+            sampler_name in self.samplers.keys()
+        ), "Invalid sub-sampler specified, valid options are: {}, " "requested: {}".format(
+            self.samplers.keys(), sampler_name
+        )
+        # Add the mujoco objects to the requested sub-sampler
+        self.samplers[sampler_name].add_objects(mujoco_objects)
+
+    def reset(self):
+        """
+        Resets this sampler. In addition to base method, iterates over all sub-samplers and resets them
+        """
+        super().reset()
+        for sampler in self.samplers.values():
+            sampler.reset()
+
+    def sample(self, fixtures=None, reference=None, on_top=True):
+        """
+        Sample from each placement initializer sequentially, in the order
+        that they were appended.
+
+        Args:
+            fixtures (dict): dictionary of current object placements in the scene as well as any other relevant
+                obstacles that should not be in contact with newly sampled objects. Used to make sure newly
+                generated placements are valid. Should be object names mapped to (pos, quat, MujocoObject)
+
+            reference (str or 3-tuple or None): if provided, sample relative placement. This will override each
+                sampler's @reference argument if not already specified. Can either be a string, which
+                corresponds to an existing object found in @fixtures, or a direct (x,y,z) value. If None, will sample
+                relative to this sampler's `'reference_pos'` value.
+
+            on_top (bool): if True, sample placement on top of the reference object. This will override each
+                sampler's @on_top argument if not already specified. This corresponds to a sampled
+                z-offset of the current sampled object's bottom_offset + the reference object's top_offset
+                (if specified)
+
+        Return:
+            dict: dictionary of all object placements, mapping object_names to (pos, quat, obj), including the
+                placements specified in @fixtures. Note quat is in (w,x,y,z) form
+
+        Raises:
+            RandomizationError: [Cannot place all objects]
+        """
+        # Standardize inputs
+        placed_objects = {} if fixtures is None else copy(fixtures)
+
+        # Iterate through all samplers to sample
+        for sampler, s_args in zip(self.samplers.values(), self.sample_args.values()):
+            # Pre-process sampler args
+            if s_args is None:
+                s_args = {}
+            for arg_name, arg in zip(("reference", "on_top"), (reference, on_top)):
+                if arg_name not in s_args:
+                    s_args[arg_name] = arg
+            # Run sampler
+            new_placements = sampler.sample(fixtures=placed_objects, **s_args)
+            # Update placements
+            placed_objects.update(new_placements)
+
+        return placed_objects
+

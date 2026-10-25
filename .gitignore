@@ -3,6 +3,16 @@
 training_results/
 paper/
 
+# mimicgen_libero_bridge/: LIBERO-specific trajectory-augmentation + distractor
+# pipeline. Keep the .py source and _stubs/ (small gdown/huggingface_hub stand-
+# ins); everything below is generated data/scratch, not source -- the out/
+# directory alone runs into the hundreds of GB.
+/mimicgen_libero_bridge/out/
+/mimicgen_libero_bridge/*.hdf5
+/mimicgen_libero_bridge/wrist_check/
+/mimicgen_libero_bridge/*.log
+/mimicgen_libero_bridge/__pycache__/
+
 
 # Mac OSX
 .DS_Store
